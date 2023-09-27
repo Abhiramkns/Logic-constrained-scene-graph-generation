@@ -3,6 +3,7 @@ from torchvision.models import resnet50, ResNet50_Weights
 from torch.utils.data import Dataset, DataLoader
 import h5py, json
 
+device = "cpu"
 class VGImageDataset(Dataset):
 
     def __init__(self, imdb_h5, sgg_h5, sgg_dict, transform=None, target_transform=None):
@@ -21,7 +22,7 @@ class VGImageDataset(Dataset):
         image = self.imdb['images'][idx]
         if self.transform:
             image = self.transform(torch.tensor(image))
-        image.to(torch.device('cuda'))
+        image.to(torch.device(device))
 
         start = self.sgg['img_to_first_box'][idx]
         end = self.sgg['img_to_last_box'][idx]
@@ -39,7 +40,7 @@ class VGImageDataset(Dataset):
         
         if self.target_transform:
             labels = self.target_transform(labels)
-        labels.to(torch.device('cuda'))
+        labels.to(torch.device(device))
 
         return image, labels
     
@@ -48,10 +49,12 @@ class VGImageDataset(Dataset):
         return torch.utils.data.dataloader.default_collate(batch)
 
 if __name__ == '__main__':
+    if torch.cuda.is_available():
+        device = "cuda"
     weights = ResNet50_Weights.DEFAULT
     resnet = resnet50(weights=weights)
     resnet.fc = torch.nn.Linear(resnet.fc.in_features, 40)
-    resnet.to(torch.device('cuda'))
+    resnet.to(torch.device(device))
     #print(net)
 
     params = [param for param in resnet.parameters()]
@@ -59,9 +62,9 @@ if __name__ == '__main__':
         param.requires_grad = False
     params[-1].requires_grad = True
     
-    imdb_path = '/home/grav/PRProject/mini-vg/mini_imdb_1024.h5'
-    sgg_path = '/home/grav/PRProject/mini-vg/mini_VG-SGG.h5'
-    sgg_dict_path = '/home/grav/PRProject/mini-vg/mini_VG-SGG-dicts.json'
+    imdb_path = '../data/mini_imdb_1024.h5'
+    sgg_path = '../data/mini-vg/mini_VG-SGG.h5'
+    sgg_dict_path = '../data/mini_VG-SGG-dicts.json'
     train_data = VGImageDataset(imdb_path, sgg_path, sgg_dict_path, transform=weights.transforms())
 
     BATCH_SIZE = 128
@@ -69,14 +72,14 @@ if __name__ == '__main__':
     EPOCHS = 32
 
     train_dataloader = DataLoader(train_data, BATCH_SIZE, shuffle=False, collate_fn=train_data.colate_fn)
-    optimizer = torch.optim.SGD([params[-1]], lr=LEARNING_RATE, momentum=0.9)
+    optimizer = torch.optim.Adamax([params[-1]], lr=LEARNING_RATE, momentum=0.9)
     critereon = torch.nn.CrossEntropyLoss()
 
     for epoch in range(EPOCHS):
         for i, data in enumerate(train_dataloader, 0):
             train_images, train_labels = data
-            train_images = train_images.to(torch.device('cuda'))
-            train_labels = train_labels.to(torch.device('cuda'))
+            train_images = train_images.to(torch.device(device))
+            train_labels = train_labels.to(torch.device(device))
 
             predictions = resnet(train_images)
 
